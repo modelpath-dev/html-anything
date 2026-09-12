@@ -443,6 +443,53 @@ describe("invokeAgent", () => {
     });
   });
 
+  describe("grok headless contract", () => {
+    it("passes the prompt after -p and skips stdin protocol flags", async () => {
+      const events = await driveInvoke(
+        { agent: "grok", prompt: "make a card", model: "grok-build", binOverride: BIN_OVERRIDE },
+        null,
+        0,
+      );
+
+      const start = events.find((e) => e.type === "start");
+      expect(start).toBeDefined();
+      if (start && start.type === "start") {
+        expect(start.argv).toEqual([
+          "--no-auto-update",
+          "--output-format",
+          "streaming-json",
+          "--always-approve",
+          "--model",
+          "grok-build",
+          "-p",
+          "make a card",
+        ]);
+      }
+    });
+
+    it("parses streaming-json text and end events", async () => {
+      const events = await driveInvoke(
+        { agent: "grok", prompt: "make a card", binOverride: BIN_OVERRIDE },
+        `${JSON.stringify({ type: "text", data: "<html>ok</html>" })}\n${JSON.stringify({
+          type: "end",
+          sessionId: "abc",
+          stopReason: "end_turn",
+          usage: { input_tokens: 3, output_tokens: 1 },
+        })}\n`,
+        0,
+      );
+
+      expect(events).toContainEqual({ type: "delta", text: "<html>ok</html>" });
+      expect(events).toContainEqual({ type: "meta", key: "session", value: "abc" });
+      expect(events).toContainEqual({ type: "meta", key: "result", value: "end_turn" });
+      expect(events).toContainEqual({
+        type: "meta",
+        key: "usage",
+        value: { input_tokens: 3, output_tokens: 1 },
+      });
+    });
+  });
+
   describe("start event", () => {
     it("includes bin, argv, and promptBytes", async () => {
       const events = await driveInvoke(

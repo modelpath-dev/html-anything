@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseLine, makeParser } from "../argv";
+import { buildArgv, parseLine, makeParser } from "../argv";
 
 describe("parseLine opencode", () => {
   it("extracts text from nested part payload", () => {
@@ -216,6 +216,82 @@ describe("parseLine bob", () => {
         text: "<html><body>Final result</body></html>",
       },
     ]);
+  });
+});
+
+describe("buildArgv grok", () => {
+  it("ends with -p so the argv protocol can append the prompt", () => {
+    expect(buildArgv("grok")).toEqual([
+      "--no-auto-update",
+      "--output-format",
+      "streaming-json",
+      "--always-approve",
+      "-p",
+    ]);
+  });
+
+  it("inserts --model before -p", () => {
+    expect(buildArgv("grok", { model: "grok-build" })).toEqual([
+      "--no-auto-update",
+      "--output-format",
+      "streaming-json",
+      "--always-approve",
+      "--model",
+      "grok-build",
+      "-p",
+    ]);
+  });
+});
+
+describe("parseLine grok", () => {
+  it("extracts streaming-json text chunks from data", () => {
+    expect(
+      parseLine("grok", JSON.stringify({ type: "text", data: "<html>ok</html>" })),
+    ).toEqual([{ kind: "delta", text: "<html>ok</html>" }]);
+  });
+
+  it("extracts session and usage from the end event", () => {
+    const usage = { input_tokens: 10, output_tokens: 4 };
+    expect(
+      parseLine(
+        "grok",
+        JSON.stringify({
+          type: "end",
+          stopReason: "end_turn",
+          sessionId: "abc123",
+          usage,
+          total_cost_usd: 0.01,
+        }),
+      ),
+    ).toEqual([
+      { kind: "meta", key: "session", value: "abc123" },
+      { kind: "meta", key: "usage", value: usage },
+      { kind: "meta", key: "result", value: "end_turn" },
+      { kind: "meta", key: "cost_usd", value: 0.01 },
+    ]);
+  });
+
+  it("parses the final json object when there is no type field", () => {
+    expect(
+      parseLine(
+        "grok",
+        JSON.stringify({
+          text: "<html><body>done</body></html>",
+          sessionId: "s1",
+          usage: { input_tokens: 2, output_tokens: 1 },
+        }),
+      ),
+    ).toEqual([
+      { kind: "delta", text: "<html><body>done</body></html>" },
+      { kind: "meta", key: "session", value: "s1" },
+      { kind: "meta", key: "usage", value: { input_tokens: 2, output_tokens: 1 } },
+    ]);
+  });
+
+  it("records thought events as thinking meta", () => {
+    expect(
+      parseLine("grok", JSON.stringify({ type: "thought", data: "planning" })),
+    ).toEqual([{ kind: "meta", key: "thinking", value: "planning" }]);
   });
 });
 

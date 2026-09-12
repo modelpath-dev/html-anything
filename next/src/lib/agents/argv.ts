@@ -15,7 +15,7 @@ export class UnsupportedAgentProtocolError extends Error {
   constructor(public readonly agent: string, public readonly protocol: string) {
     super(
       `${agent} uses the ${protocol} protocol, which is not yet wired up in this build. ` +
-        `Pick one of: claude / codex / cursor-agent / gemini / copilot / opencode / qwen / qoder / codewhale / deepseek-tui / aider.`,
+        `Pick one of: claude / codex / cursor-agent / gemini / copilot / opencode / qwen / qoder / codewhale / deepseek-tui / aider / grok.`,
     );
   }
 }
@@ -89,6 +89,19 @@ export function buildArgv(agent: string, _opts: AgentArgvOpts = {}): string[] {
       // --hide-intermediary-output suppresses thinking/reasoning, leaving only
       // the final completion in stdout.
       return ["--output-format", "stream-json", "--hide-intermediary-output"];
+    case "grok":
+      // Headless grok requires `-p`/`--single <prompt>`. The argv protocol
+      // appends the prompt as the last positional, so `-p` stays last.
+      // `--no-auto-update` skips the background updater in scripts/CI.
+      // `--always-approve` is the documented auto-approve flag.
+      return [
+        "--no-auto-update",
+        "--output-format",
+        "streaming-json",
+        "--always-approve",
+        ...(model ? ["--model", model] : []),
+        "-p",
+      ];
     case "opencode":
       return [
         "run",
@@ -426,6 +439,36 @@ function parseLineWithState(agent: string, line: string, state: ParseState): Age
     if (typeof obj.text === "string") out.push({ kind: "delta", text: obj.text });
     if (typeof obj.content === "string") out.push({ kind: "delta", text: obj.content });
     if (typeof obj.message === "string") out.push({ kind: "delta", text: obj.message });
+  }
+
+  if (agent === "grok") {
+    // streaming-json: {type:"text",data} / {type:"end",sessionId,usage}.
+    // json: one object with `text` and no `type`.
+    if (obj.type === "text" && typeof obj.data === "string") {
+      out.push({ kind: "delta", text: obj.data });
+    }
+    if (obj.type === "thought" && typeof obj.data === "string") {
+      out.push({ kind: "meta", key: "thinking", value: obj.data });
+    }
+    if (obj.type === "end") {
+      if (typeof obj.sessionId === "string") {
+        out.push({ kind: "meta", key: "session", value: obj.sessionId });
+      }
+      if (obj.usage) out.push({ kind: "meta", key: "usage", value: obj.usage });
+      if (typeof obj.stopReason === "string") {
+        out.push({ kind: "meta", key: "result", value: obj.stopReason });
+      }
+      if (typeof obj.total_cost_usd === "number") {
+        out.push({ kind: "meta", key: "cost_usd", value: obj.total_cost_usd });
+      }
+    }
+    if (!obj.type && typeof obj.text === "string") {
+      out.push({ kind: "delta", text: obj.text });
+      if (typeof obj.sessionId === "string") {
+        out.push({ kind: "meta", key: "session", value: obj.sessionId });
+      }
+      if (obj.usage) out.push({ kind: "meta", key: "usage", value: obj.usage });
+    }
   }
 
   if (agent === "qoder") {

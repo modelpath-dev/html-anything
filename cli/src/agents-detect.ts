@@ -114,6 +114,18 @@ export const AGENTS: AgentDef[] = [
     ],
   },
   {
+    id: "grok",
+    label: "Grok Build",
+    bin: "grok",
+    envOverride: "GROK_BIN",
+    vendor: "xAI",
+    protocol: "argv",
+    fallbackModels: [
+      DEFAULT_MODEL,
+      { id: "grok-build", label: "grok-build" },
+    ],
+  },
+  {
     id: "opencode",
     label: "OpenCode",
     bin: "opencode-cli",

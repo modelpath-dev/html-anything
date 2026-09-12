@@ -150,6 +150,20 @@ export const AGENTS: AgentDef[] = [
     fallbackModels: [DEFAULT_MODEL],
   },
   {
+    // Grok Build's headless path is `grok -p <prompt>` (not stdin). The
+    // "argv" protocol appends the prompt after buildArgv's trailing `-p`.
+    id: "grok",
+    label: "Grok Build",
+    bin: "grok",
+    envOverride: "GROK_BIN",
+    vendor: "xAI",
+    protocol: "argv",
+    fallbackModels: [
+      DEFAULT_MODEL,
+      { id: "grok-build", label: "grok-build" },
+    ],
+  },
+  {
     id: "opencode",
     label: "OpenCode",
     bin: "opencode-cli",

@@ -43,7 +43,7 @@ describe("detectAgents", () => {
       expect(grok.available).toBe(true);
       expect(grok.path).toBe("/usr/local/bin/grok");
       expect(grok.resolvedBin).toBe("grok");
-      expect(grok.protocol).toBe("argv");
+      expect(grok.protocol).toBe("prompt-file");
     });
 
     it("finds claude via absolute CLAUDE_BIN path", () => {
@@ -109,7 +109,7 @@ describe("detectAgents", () => {
       expect(claude.resolvedBin).toBe("claude");
     });
 
-    it("detects grok on PATH as an argv protocol agent", () => {
+    it("detects grok on PATH as a prompt-file protocol agent", () => {
       existsSyncMock.mockImplementation((p) => {
         if (p === "/usr/local/bin/grok") return true;
         return false;
@@ -121,7 +121,7 @@ describe("detectAgents", () => {
       expect(grok.available).toBe(true);
       expect(grok.path).toBe("/usr/local/bin/grok");
       expect(grok.resolvedBin).toBe("grok");
-      expect(grok.protocol).toBe("argv");
+      expect(grok.protocol).toBe("prompt-file");
       expect(grok.unsupported).toBeUndefined();
       expect(grok.label).toBe("Grok Build");
     });

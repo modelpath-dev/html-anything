@@ -53,7 +53,7 @@ describe("detectAgents grok", () => {
     expect(grok.available).toBe(true);
     expect(grok.path).toBe("/usr/local/bin/grok");
     expect(grok.resolvedBin).toBe("grok");
-    expect(grok.protocol).toBe("argv");
+    expect(grok.protocol).toBe("prompt-file");
     expect(grok.unsupported).toBeUndefined();
     expect(grok.label).toBe("Grok Build");
   });
@@ -71,6 +71,6 @@ describe("detectAgents grok", () => {
   it("stays unavailable when grok is missing", () => {
     const grok = findAgent(detectAgents(), "grok");
     expect(grok.available).toBe(false);
-    expect(grok.protocol).toBe("argv");
+    expect(grok.protocol).toBe("prompt-file");
   });
 });

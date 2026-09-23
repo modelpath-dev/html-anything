@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { resolveOnPath, AGENTS, type AgentDef, type AgentProtocol } from "./agents-detect.js";
 
@@ -135,15 +136,14 @@ function buildArgv(agent: string, opts: AgentArgvOpts = {}): string[] {
         ...(model ? ["--model", model] : []),
       ];
     case "grok":
-      // Headless grok requires `-p`/`--single <prompt>`. The argv protocol
-      // appends the prompt as the last positional, so `-p` stays last.
+      // The "prompt-file" protocol appends `--prompt-file <path>`, which runs
+      // grok headless the same way `-p <prompt>` does.
       return [
         "--no-auto-update",
         "--output-format",
         "streaming-json",
         "--always-approve",
         ...(model ? ["--model", model] : []),
-        "-p",
       ];
     case "opencode":
       return [
@@ -497,11 +497,21 @@ export function invokeAgent(opts: InvokeOpts): ReadableStream<InvokeEvent> {
   const env = envFor(opts.agent);
   const promptViaArgv = def.protocol === "argv";
   const promptViaMessageFlag = def.protocol === "argv-message";
+  const promptViaFile = def.protocol === "prompt-file";
+  const useShell = process.platform === "win32";
 
   return new ReadableStream<InvokeEvent>({
     async start(controller) {
       let closed = false;
       let child: ChildProcessWithoutNullStreams | null = null;
+      let promptDir: string | null = null;
+      const removePromptFile = () => {
+        if (!promptDir) return;
+        try {
+          rmSync(promptDir, { recursive: true, force: true });
+          promptDir = null;
+        } catch {}
+      };
 
       const safeEnqueue = (ev: InvokeEvent) => {
         if (closed) return;
@@ -543,15 +553,34 @@ export function invokeAgent(opts: InvokeOpts): ReadableStream<InvokeEvent> {
       }
       if (promptViaArgv) argv = [...argv, opts.prompt];
       if (promptViaMessageFlag) argv = [...argv, "--message", opts.prompt];
+      // grok reads the prompt from a private temp file so it never reaches
+      // the Windows shell command line.
+      if (promptViaFile) {
+        try {
+          promptDir = mkdtempSync(path.join(tmpdir(), "html-anything-"));
+          const promptPath = path.join(promptDir, "prompt.md");
+          writeFileSync(promptPath, opts.prompt, { mode: 0o600 });
+          argv = [...argv, "--prompt-file", useShell ? `"${promptPath}"` : promptPath];
+        } catch (err) {
+          removePromptFile();
+          safeEnqueue({
+            type: "error",
+            message: err instanceof Error ? err.message : String(err),
+          });
+          safeClose();
+          return;
+        }
+      }
 
       try {
         child = spawn(bin, argv, {
           cwd: opts.cwd ?? process.cwd(),
           env,
           stdio: ["pipe", "pipe", "pipe"],
-          shell: process.platform === "win32",
+          shell: useShell,
         });
       } catch (err) {
+        removePromptFile();
         safeEnqueue({
           type: "error",
           message: err instanceof Error ? err.message : String(err),
@@ -569,7 +598,7 @@ export function invokeAgent(opts: InvokeOpts): ReadableStream<InvokeEvent> {
 
       child.stdin.on("error", () => {});
       try {
-        if (!promptViaArgv && !promptViaMessageFlag) child.stdin.write(opts.prompt);
+        if (!promptViaArgv && !promptViaMessageFlag && !promptViaFile) child.stdin.write(opts.prompt);
         child.stdin.end();
       } catch {}
 
@@ -601,11 +630,13 @@ export function invokeAgent(opts: InvokeOpts): ReadableStream<InvokeEvent> {
       });
 
       child.on("error", (err) => {
+        removePromptFile();
         safeEnqueue({ type: "error", message: err.message });
         safeClose();
       });
 
       child.on("close", (code) => {
+        removePromptFile();
         if (opts.agent === "openclaw") {
           if (stdoutBuf.trim()) {
             try {
@@ -650,6 +681,7 @@ export function invokeAgent(opts: InvokeOpts): ReadableStream<InvokeEvent> {
         try {
           child?.kill("SIGTERM");
         } catch {}
+        removePromptFile();
         safeClose();
       };
       opts.signal?.addEventListener("abort", onAbort, { once: true });

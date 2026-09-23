@@ -514,6 +514,37 @@ describe("invokeAgent", () => {
       }
     });
 
+    it.each(["grok", "claude"])(
+      "refuses a %s model carrying shell metacharacters before anything spawns",
+      async (agent) => {
+        const platform = process.platform;
+        Object.defineProperty(process, "platform", { value: "win32" });
+        try {
+          for (const model of [
+            "grok-build & calc.exe",
+            "x|whoami",
+            "%PATH%",
+            'a" "b',
+            "a^b",
+            "a>b",
+            "--config=evil",
+            "a b",
+          ]) {
+            mockSpawn.mockClear();
+            const events = await collectStream(
+              invokeAgent({ agent, prompt: "make a card", model, binOverride: BIN_OVERRIDE }),
+            );
+            expect(events).toEqual([
+              { type: "error", message: expect.stringContaining("invalid model id") },
+            ]);
+            expect(mockSpawn).not.toHaveBeenCalled();
+          }
+        } finally {
+          Object.defineProperty(process, "platform", { value: platform });
+        }
+      },
+    );
+
     it("removes the prompt file when the run is aborted", async () => {
       const controller = new AbortController();
       const run = await runGrok("make a card", controller.signal);

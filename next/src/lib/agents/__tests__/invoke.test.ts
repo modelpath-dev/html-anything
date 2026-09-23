@@ -96,3 +96,63 @@ describe("invokeAgent grok prompt delivery", () => {
     expect(existsSync(run.spawned.promptPath)).toBe(false);
   });
 });
+
+describe("invokeAgent model validation", () => {
+  async function collect(opts: Parameters<typeof invokeAgent>[0]) {
+    const events = [];
+    const reader = invokeAgent(opts).getReader();
+    for (let r = await reader.read(); !r.done; r = await reader.read()) events.push(r.value);
+    return events;
+  }
+
+  it.each(["grok", "claude"])(
+    "refuses a %s model carrying shell metacharacters before anything spawns",
+    async (agent) => {
+      const platform = process.platform;
+      Object.defineProperty(process, "platform", { value: "win32" });
+      try {
+        for (const model of [
+          "grok-build & calc.exe",
+          "x|whoami",
+          "%PATH%",
+          'a" "b',
+          "a^b",
+          "a>b",
+          "--config=evil",
+          "a b",
+        ]) {
+          mockSpawn.mockClear();
+          const events = await collect({ agent, prompt: "make a card", model, binOverride: BIN });
+          expect(events).toEqual([
+            { type: "error", message: expect.stringContaining("invalid model id") },
+          ]);
+          expect(mockSpawn).not.toHaveBeenCalled();
+        }
+      } finally {
+        Object.defineProperty(process, "platform", { value: platform });
+      }
+    },
+  );
+
+  it("passes a declared model id through to --model", async () => {
+    let args: string[] = [];
+    mockSpawn.mockImplementation((_bin: string, a: string[]) => {
+      args = a;
+      const child = Object.assign(new EventEmitter(), {
+        stdout: new PassThrough(),
+        stderr: new PassThrough(),
+        stdin: new Writable({ write: (_c, _e, cb) => cb() }),
+        kill: vi.fn(),
+      });
+      setImmediate(() => {
+        child.stdout.end();
+        setImmediate(() => child.emit("close", 0));
+      });
+      return child;
+    });
+    for (const model of ["grok-build", "openrouter/anthropic/claude-opus-4.7", "openai-codex:gpt-5.5"]) {
+      await collect({ agent: "grok", prompt: "make a card", model, binOverride: BIN });
+      expect(args.slice(args.indexOf("--model"), args.indexOf("--model") + 2)).toEqual(["--model", model]);
+    }
+  });
+});

@@ -20,8 +20,16 @@ export class UnsupportedAgentProtocolError extends Error {
   }
 }
 
+// The model comes straight from the request body and lands in argv, which
+// Windows hands to cmd.exe (`shell: true`). Only accept the characters real
+// model ids use, and no leading `-`, so it can't break out or pose as a flag.
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._\/:-]{0,127}$/;
+
 export function buildArgv(agent: string, _opts: AgentArgvOpts = {}): string[] {
   const { model } = _opts;
+  if (model && !MODEL_ID.test(model)) {
+    throw new Error(`invalid model id: ${JSON.stringify(model)}`);
+  }
   switch (agent) {
     case "claude":
       return [

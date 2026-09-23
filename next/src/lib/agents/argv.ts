@@ -90,8 +90,8 @@ export function buildArgv(agent: string, _opts: AgentArgvOpts = {}): string[] {
       // the final completion in stdout.
       return ["--output-format", "stream-json", "--hide-intermediary-output"];
     case "grok":
-      // Headless grok requires `-p`/`--single <prompt>`. The argv protocol
-      // appends the prompt as the last positional, so `-p` stays last.
+      // The "prompt-file" protocol appends `--prompt-file <path>`, which runs
+      // grok headless the same way `-p <prompt>` does.
       // `--no-auto-update` skips the background updater in scripts/CI.
       // `--always-approve` is the documented auto-approve flag.
       return [
@@ -100,7 +100,6 @@ export function buildArgv(agent: string, _opts: AgentArgvOpts = {}): string[] {
         "streaming-json",
         "--always-approve",
         ...(model ? ["--model", model] : []),
-        "-p",
       ];
     case "opencode":
       return [

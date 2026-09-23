@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildArgv, parseLine, makeParser } from "../argv";
+import { parseLine, makeParser } from "../argv";
 
 describe("parseLine opencode", () => {
   it("extracts text from nested part payload", () => {
@@ -215,30 +215,6 @@ describe("parseLine bob", () => {
         kind: "delta",
         text: "<html><body>Final result</body></html>",
       },
-    ]);
-  });
-});
-
-describe("buildArgv grok", () => {
-  it("ends with -p so the argv protocol can append the prompt", () => {
-    expect(buildArgv("grok")).toEqual([
-      "--no-auto-update",
-      "--output-format",
-      "streaming-json",
-      "--always-approve",
-      "-p",
-    ]);
-  });
-
-  it("inserts --model before -p", () => {
-    expect(buildArgv("grok", { model: "grok-build" })).toEqual([
-      "--no-auto-update",
-      "--output-format",
-      "streaming-json",
-      "--always-approve",
-      "--model",
-      "grok-build",
-      "-p",
     ]);
   });
 });

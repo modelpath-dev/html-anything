@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseLine, makeParser, sanitizeAgentStderrLine } from '../argv';
+import { buildArgv, parseLine, makeParser, sanitizeAgentStderrLine, UnsupportedAgentProtocolError } from '../argv';
+import { AGENTS } from '../detect';
 
 describe('parseLine codex lifecycle', () => {
   it('reports the thread and generation start', () => {
@@ -322,3 +323,16 @@ describe("parseLine grok", () => {
   });
 });
 
+describe("buildArgv model ids", () => {
+  it("accepts every model the picker offers", () => {
+    for (const agent of AGENTS) {
+      for (const { id } of agent.fallbackModels) {
+        try {
+          buildArgv(agent.id, { model: id });
+        } catch (err) {
+          if (!(err instanceof UnsupportedAgentProtocolError)) throw err;
+        }
+      }
+    }
+  });
+});
